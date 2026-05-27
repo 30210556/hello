@@ -16,9 +16,10 @@
         h2 { color: #61dafb; margin-bottom: 5px; }
         p { color: #94a3b8; margin-bottom: 25px; }
         
+        /* 컨트롤러 디자인 보강 */
         .controls { 
             background: #1e293b; 
-            padding: 20px; 
+            padding: 25px; 
             border-radius: 12px; 
             box-shadow: 0 4px 20px rgba(0,0,0,0.3); 
             margin-bottom: 25px; 
@@ -35,8 +36,20 @@
             color: #fff; 
             font-size: 14px; 
         }
+        
+        /* 슬라이더가 확실하게 보이도록 스타일에 강조를 주었습니다 */
+        .slider-group {
+            background: #0f172a;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            margin-top: 10px;
+        }
         input[type="range"] { 
             width: 100%; 
+            margin-top: 10px;
+            display: block;
+            cursor: pointer;
             accent-color: #61dafb;
         }
         
@@ -68,14 +81,14 @@
             transform: translateY(-2px); 
             box-shadow: 0 6px 16px rgba(3, 105, 161, 0.4);
         }
-        .highlight-freq { color: #f43f5e; font-weight: bold; font-size: 18px; }
+        .highlight-freq { color: #f43f5e; font-weight: bold; font-size: 20px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Fourier Winding Machine (수동 정밀 분석기)</h2>
-    <p>슬라이더를 조절해 감기 진동수를 변경하면 2번 그래프의 회전과 3번 그래프의 붉은 플롯선 위치가 실시간으로 연동됩니다.</p>
+    <h2>Fourier Winding Machine (수동 정밀 조절 버전)</h2>
+    <p>아래 슬라이더 바를 마우스나 터치로 움직여서 '감기 진동수'를 변경하고, 실시간 애니메이션 버튼을 눌러보세요.</p>
     
     <div class="controls">
         <div class="input-row">
@@ -91,9 +104,13 @@
                 <button id="startBtn">실시간 감기 애니메이션 재생</button>
             </div>
         </div>
-        <div class="control-group">
-            <label for="windingFreqInput">기계가 파형을 감는 진동수: <span id="windingFreqVal" class="highlight-freq">1.00</span> 바퀴/초</label>
-            <input type="range" id="windingFreqInput" min="0.0" max="5.0" step="0.02" value="1.0">
+        
+        <div class="control-group slider-group">
+            <label for="windingFreqInput" style="display: flex; justify-content: space-between;">
+                <span>⚙️ [조절 슬라이더] 기계가 파형을 감는 진동수 설정 :</span>
+                <span><span id="windingFreqVal" class="highlight-freq">1.00</span> 바퀴/초 (Hz)</span>
+            </label>
+            <input type="range" id="windingFreqInput" min="0.0" max="5.0" step="0.02" value="1.00">
         </div>
     </div>
 
@@ -117,7 +134,6 @@
 
 <script>
     const maxTime = 10.0; 
-    //dt 간격을 조절하여 복소평면의 회전 속도를 눈이 편안하도록 훨씬 느리고 부드럽게 낮췄습니다.
     const dt = 0.04;     
     
     let currentTime = 0;
@@ -138,11 +154,11 @@
     const windingVal = document.getElementById('windingFreqVal');
     const startBtn = document.getElementById('startBtn');
 
-    // 슬라이더를 움직이면 실시간으로 진동수가 바뀌며 그래프들이 즉시 동적 연동됩니다.
+    // 슬라이더 조절 이벤트 연결 확인 완료
     windingInput.addEventListener('input', (e) => {
         windingFreq = parseFloat(e.target.value);
         windingVal.innerText = windingFreq.toFixed(2);
-        calculateFullFourierSpectrum(); // 3번 전체 배경 곡선 미리 계산
+        calculateFullFourierSpectrum(); 
         resetSimulation();
     });
     
@@ -199,12 +215,10 @@
         });
     }
 
-    // 배경에 깔릴 푸리에 변환 맵을 미리 연산해두는 헬퍼 함수
     function calculateFullFourierSpectrum() {
         let fullSpectrum = [];
         let tracedSpectrum = [];
         
-        // 0Hz부터 5Hz까지 루프를 돌며 무게중심 x좌표 추출
         for (let f = 0; f <= 5.0; f += 0.02) {
             let sX = 0, c = 0;
             for (let t = 0; t <= maxTime; t += 0.02) {
@@ -215,7 +229,6 @@
             let avgX = Math.abs(sX / c);
             fullSpectrum.push({x: f, y: avgX});
             
-            // 현재 슬라이더가 위치한 주파수 이하의 값만 붉은 채우기 영역으로 분류
             if (f <= windingFreq) {
                 tracedSpectrum.push({x: f, y: avgX});
             }
@@ -224,10 +237,11 @@
         fourierChart.data.datasets[0].data = fullSpectrum;
         fourierChart.data.datasets[1].data = tracedSpectrum;
         
-        // 하얀색 탐침 점의 현재 Y 위치 지정
         let currentWindingY = 0;
-        let closest = fullSpectrum.reduce((prev, curr) => Math.abs(curr.x - windingFreq) < Math.abs(prev.x - windingFreq) ? curr : prev);
-        currentWindingY = closest.y;
+        if(fullSpectrum.length > 0) {
+            let closest = fullSpectrum.reduce((prev, curr) => Math.abs(curr.x - windingFreq) < Math.abs(prev.x - windingFreq) ? curr : prev);
+            currentWindingY = closest.y;
+        }
         fourierChart.data.datasets[2].data = [{x: windingFreq, y: currentWindingY}];
         
         fourierChart.update();
@@ -277,15 +291,13 @@
 
         complexPoints.push({x: x, y: y});
 
-        // 2번 복소평면 업데이트 (속도가 늦춰져서 선이 그려지는 궤적이 눈에 명확히 보입니다)
         complexChart.data.datasets[0].data = [...complexPoints];
         complexChart.data.datasets[1].data = [{x: x, y: y}];
-        complexChart.data.datasets[2].data = [{x: centerOfGravityX, y: 0}]; // 노란색 무게중심 점 추가
+        complexChart.data.datasets[2].data = [{x: centerOfGravityX, y: 0}]; 
 
         complexChart.update();
 
         currentTime += dt;
-        // 부드럽게 감기는 모습을 제어하기 위해 프레임 타이밍 조절
         animationFrameId = requestAnimationFrame(animate);
     }
 
