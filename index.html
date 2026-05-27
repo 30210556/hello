@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>3Blue1Brown 스타일 푸리에 주파수 분석기</title>
+    <title>푸리에 주파수 분석기 - 수동 정밀 조절 버전</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { 
@@ -23,7 +23,7 @@
             box-shadow: 0 4px 20px rgba(0,0,0,0.3); 
             margin-bottom: 25px; 
         }
-        .input-row { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+        .input-row { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
         .control-group { display: flex; flex-direction: column; min-width: 220px; flex: 1; }
         .control-group label { font-weight: 600; margin-bottom: 8px; color: #cbd5e1; font-size: 14px; }
         
@@ -35,8 +35,12 @@
             color: #fff; 
             font-size: 14px; 
         }
+        input[type="range"] { 
+            width: 100%; 
+            accent-color: #61dafb;
+        }
         
-        .chart-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 25px; }
+        .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; }
         .chart-container { 
             background: #1e293b; 
             padding: 20px; 
@@ -46,11 +50,11 @@
         .chart-container h3 { margin-top: 0; font-size: 16px; color: #94a3b8; border-bottom: 1px solid #334155; padding-bottom: 10px; }
         .full-width { grid-column: span 2; }
         
-        canvas { width: 100% !important; height: 280px !important; }
+        canvas { width: 100% !important; height: 300px !important; }
         
         button { 
-            padding: 12px 35px; 
-            background: linear-gradient(135deg, #f43f5e, #be123c); 
+            padding: 12px 30px; 
+            background: linear-gradient(135deg, #38bdf8, #0369a1); 
             color: white; 
             border: none; 
             border-radius: 6px; 
@@ -58,87 +62,94 @@
             font-weight: bold; 
             font-size: 14px; 
             transition: all 0.2s;
-            box-shadow: 0 4px 12px rgba(190, 18, 60, 0.3);
+            box-shadow: 0 4px 12px rgba(3, 105, 161, 0.3);
         }
         button:hover { 
             transform: translateY(-2px); 
-            box-shadow: 0 6px 16px rgba(190, 18, 60, 0.4);
+            box-shadow: 0 6px 16px rgba(3, 105, 161, 0.4);
         }
-        .status-text { font-size: 18px; font-weight: bold; color: #38bdf8; }
+        .highlight-freq { color: #f43f5e; font-weight: bold; font-size: 18px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Fourier Frequency Scanner (주파수 분해 기계)</h2>
-    <p>주파수를 0Hz에서 5Hz까지 실시간으로 스캔하며, 영상 속 그래프 기하학적 메커니즘을 그대로 구현합니다.</p>
+    <h2>Fourier Winding Machine (수동 정밀 분석기)</h2>
+    <p>슬라이더를 조절해 감기 진동수를 변경하면 2번 그래프의 회전과 3번 그래프의 붉은 플롯선 위치가 실시간으로 연동됩니다.</p>
     
     <div class="controls">
         <div class="input-row">
             <div class="control-group">
-                <label>합성 주파수 A (Hz)</label>
+                <label for="freq1">합성 주파수 A (Hz)</label>
                 <input type="number" id="freq1" value="2" min="0.5" max="8" step="0.5">
             </div>
             <div class="control-group">
-                <label>합성 주파수 B (Hz)</label>
+                <label for="freq2">합성 주파수 B (Hz)</label>
                 <input type="number" id="freq2" value="3" min="0.5" max="8" step="0.5">
             </div>
-            <div class="control-group">
-                <label>현재 스캔 중인 진동수</label>
-                <div id="scanFreqVal" class="status-text">0.00 바퀴/초 (Hz)</div>
+            <div class="control-group" style="justify-content: flex-end;">
+                <button id="startBtn">실시간 감기 애니메이션 재생</button>
             </div>
-            <div>
-                <button id="startBtn">주파수 전체 스캔 시작</button>
-            </div>
+        </div>
+        <div class="control-group">
+            <label for="windingFreqInput">기계가 파형을 감는 진동수: <span id="windingFreqVal" class="highlight-freq">1.00</span> 바퀴/초</label>
+            <input type="range" id="windingFreqInput" min="0.0" max="5.0" step="0.02" value="1.0">
         </div>
     </div>
 
     <div class="chart-grid">
         <div class="chart-container full-width">
-            <h3>1. 원래 시간-세기 그래프 $f(t)$ (총 관찰 시간: 10초)</h3>
+            <h3>1. 원래 시간-세기 그래프 $f(t)$ (관찰 시간: 10초)</h3>
             <canvas id="timeChart"></canvas>
         </div>
         
         <div class="chart-container">
-            <h3>2. 원형 틀에 둘둘 감아버린 파형</h3>
+            <h3>2. 원형 틀에 둘둘 감아버린 파형 (회전 속도 최적화)</h3>
             <canvas id="complexChart"></canvas>
         </div>
         
         <div class="chart-container">
-            <h3>3. $x$좌표의 무게 중심 스펙트럼 그래프 (X: 진동수, Y: 무게중심 $x$값)</h3>
+            <h3>3. $x$좌표의 무게 중심 스펙트럼 (X: 진동수, Y: 무게중심 $x$값)</h3>
             <canvas id="fourierChart"></canvas>
         </div>
     </div>
 </div>
 
 <script>
-    const maxTime = 10.0; // 분석 대상 시간 10초 설정
-    const dt = 0.01;      // 정밀한 원형 감기를 위한 시간 간격
+    const maxTime = 10.0; 
+    //dt 간격을 조절하여 복소평면의 회전 속도를 눈이 편안하도록 훨씬 느리고 부드럽게 낮췄습니다.
+    const dt = 0.04;     
     
-    // 주파수 스캔 범위 제어
-    let currentScanFreq = 0.0;
-    const maxScanFreq = 5.0;
-    const freqStep = 0.02; // 초당 주파수 증가 단위
+    let currentTime = 0;
     let animationFrameId = null;
     
     let f1 = 2.0;
     let f2 = 3.0;
+    let windingFreq = 1.0;
     
-    // 결과 누적 데이터 배열
-    let fourierSpectrumPoints = [];
+    let complexPoints = [];
+    let sumX = 0, sampleCount = 0;
 
     let timeChart, complexChart, fourierChart;
 
     const freq1Input = document.getElementById('freq1');
     const freq2Input = document.getElementById('freq2');
-    const scanFreqVal = document.getElementById('scanFreqVal');
+    const windingInput = document.getElementById('windingFreqInput');
+    const windingVal = document.getElementById('windingFreqVal');
     const startBtn = document.getElementById('startBtn');
 
-    startBtn.addEventListener('click', startScanning);
-    freq1Input.addEventListener('change', drawStaticTimeChart);
-    freq2Input.addEventListener('change', drawStaticTimeChart);
+    // 슬라이더를 움직이면 실시간으로 진동수가 바뀌며 그래프들이 즉시 동적 연동됩니다.
+    windingInput.addEventListener('input', (e) => {
+        windingFreq = parseFloat(e.target.value);
+        windingVal.innerText = windingFreq.toFixed(2);
+        calculateFullFourierSpectrum(); // 3번 전체 배경 곡선 미리 계산
+        resetSimulation();
+    });
+    
+    freq1Input.addEventListener('change', () => { f1 = parseFloat(freq1Input.value); calculateFullFourierSpectrum(); resetSimulation(); });
+    freq2Input.addEventListener('change', () => { f2 = parseFloat(freq2Input.value); calculateFullFourierSpectrum(); resetSimulation(); });
+    startBtn.addEventListener('click', startSimulation);
 
-    // 신호 합성 함수
     function signalFunction(t) {
         return Math.sin(2 * Math.PI * f1 * t) + Math.sin(2 * Math.PI * f2 * t);
     }
@@ -147,20 +158,19 @@
         Chart.defaults.color = '#94a3b8';
         Chart.defaults.borderColor = '#334155';
 
-        // 1번 선형 시간 차트
         timeChart = new Chart(document.getElementById('timeChart').getContext('2d'), {
             type: 'line',
             data: { datasets: [{ data: [], borderColor: '#38bdf8', borderWidth: 1.5, pointRadius: 0, tension: 0.3 }] },
             options: { scales: { x: { type: 'linear', min: 0, max: maxTime } }, animation: false, plugins: { legend: { display: false } } }
         });
 
-        // 2번 원형 감기 차트
         complexChart = new Chart(document.getElementById('complexChart').getContext('2d'), {
             type: 'scatter',
             data: {
                 datasets: [
-                    { label: '감긴 파형', data: [], borderColor: '#4ade80', borderWidth: 1, showLine: true, pointRadius: 0, tension: 0.3 },
-                    { label: '무게중심', data: [], backgroundColor: '#f43f5e', pointRadius: 6, pointStyle: 'circle' }
+                    { label: '감긴 파형', data: [], borderColor: '#4ade80', borderWidth: 1.5, showLine: true, pointRadius: 0, tension: 0.3 },
+                    { label: '현재 끝점', data: [], backgroundColor: '#f43f5e', pointRadius: 6 },
+                    { label: '현재 무게중심', data: [], backgroundColor: '#fbbf24', pointRadius: 8 }
                 ]
             },
             options: { 
@@ -169,24 +179,19 @@
             }
         });
 
-        // 3번 오리지널 무게중심 분해 차트 (X: 진동수, Y: 무게중심 X좌표)
         fourierChart = new Chart(document.getElementById('fourierChart').getContext('2d'), {
             type: 'line',
             data: {
-                datasets: [{
-                    label: 'x좌표의 무게 중심',
-                    data: [],
-                    borderColor: '#f43f5e',
-                    backgroundColor: 'rgba(244, 63, 94, 0.1)',
-                    fill: true,
-                    pointRadius: 0,
-                    tension: 0.2
-                }]
+                datasets: [
+                    { label: '전체 스펙트럼 라인', data: [], borderColor: '#475569', borderWidth: 1, borderDash: [2, 2], pointRadius: 0, fill: false },
+                    { label: '현재 주파수까지의 흔적', data: [], borderColor: '#f43f5e', backgroundColor: 'rgba(244, 63, 94, 0.1)', borderWidth: 2, fill: true, pointRadius: 0, tension: 0.2 },
+                    { label: '현재 탐침 탐색기', data: [], backgroundColor: '#ffffff', pointRadius: 6 }
+                ]
             },
             options: {
                 scales: {
-                    x: { type: 'linear', min: 0, max: maxScanFreq, title: { display: true, text: '진동수 (Hz)' } },
-                    y: { min: -0.2, max: 1.0, title: { display: true, text: '무게중심 X' } }
+                    x: { type: 'linear', min: 0, max: 5.0, title: { display: true, text: '진동수 (Hz)' } },
+                    y: { min: -0.1, max: 1.0, title: { display: true, text: '무게중심 X' } }
                 },
                 animation: false,
                 plugins: { legend: { display: false } }
@@ -194,84 +199,100 @@
         });
     }
 
-    function drawStaticTimeChart() {
-        f1 = parseFloat(freq1Input.value);
-        f2 = parseFloat(freq2Input.value);
+    // 배경에 깔릴 푸리에 변환 맵을 미리 연산해두는 헬퍼 함수
+    function calculateFullFourierSpectrum() {
+        let fullSpectrum = [];
+        let tracedSpectrum = [];
+        
+        // 0Hz부터 5Hz까지 루프를 돌며 무게중심 x좌표 추출
+        for (let f = 0; f <= 5.0; f += 0.02) {
+            let sX = 0, c = 0;
+            for (let t = 0; t <= maxTime; t += 0.02) {
+                let theta = -2 * Math.PI * f * t;
+                sX += signalFunction(t) * Math.cos(theta);
+                c++;
+            }
+            let avgX = Math.abs(sX / c);
+            fullSpectrum.push({x: f, y: avgX});
+            
+            // 현재 슬라이더가 위치한 주파수 이하의 값만 붉은 채우기 영역으로 분류
+            if (f <= windingFreq) {
+                tracedSpectrum.push({x: f, y: avgX});
+            }
+        }
+        
+        fourierChart.data.datasets[0].data = fullSpectrum;
+        fourierChart.data.datasets[1].data = tracedSpectrum;
+        
+        // 하얀색 탐침 점의 현재 Y 위치 지정
+        let currentWindingY = 0;
+        let closest = fullSpectrum.reduce((prev, curr) => Math.abs(curr.x - windingFreq) < Math.abs(prev.x - windingFreq) ? curr : prev);
+        currentWindingY = closest.y;
+        fourierChart.data.datasets[2].data = [{x: windingFreq, y: currentWindingY}];
+        
+        fourierChart.update();
+    }
+
+    function resetSimulation() {
+        cancelAnimationFrame(animationFrameId);
+        currentTime = 0;
+        complexPoints = [];
+        sumX = 0; 
+        sampleCount = 0;
+
         let t_arr = [];
         for(let t=0; t<=maxTime; t+=0.02) {
             t_arr.push({x: t, y: signalFunction(t)});
         }
         timeChart.data.datasets[0].data = t_arr;
+        
+        complexChart.data.datasets[0].data = [];
+        complexChart.data.datasets[1].data = [];
+        complexChart.data.datasets[2].data = [];
+        
         timeChart.update();
+        complexChart.update();
     }
 
-    function startScanning() {
-        cancelAnimationFrame(animationFrameId);
-        currentScanFreq = 0.0;
-        fourierSpectrumPoints = [];
-        fourierChart.data.datasets[0].data = [];
-        fourierChart.update();
-        
-        f1 = parseFloat(freq1Input.value);
-        f2 = parseFloat(freq2Input.value);
-        
-        scanLoop();
+    function startSimulation() {
+        resetSimulation();
+        animate();
     }
 
-    function scanLoop() {
-        if (currentScanFreq > maxScanFreq) {
+    function animate() {
+        if (currentTime > maxTime) {
             cancelAnimationFrame(animationFrameId);
-            scanFreqVal.innerText = `스캔 완료! (최종 피크 검출)`;
             return;
         }
 
-        scanFreqVal.innerText = `${currentScanFreq.toFixed(2)} 바퀴/초 (Hz)`;
+        let f_t = signalFunction(currentTime); 
+        let theta = -2 * Math.PI * windingFreq * currentTime; 
+        
+        let x = f_t * Math.cos(theta);
+        let y = f_t * Math.sin(theta);
 
-        let complexPoints = [];
-        let sumX = 0;
-        let sampleCount = 0;
-
-        // 고정된 현재 주파수(currentScanFreq) 조건에서 0초부터 10초까지 파형을 통째로 감아봅니다.
-        for (let t = 0; t <= maxTime; t += dt) {
-            let f_t = signalFunction(t);
-            let theta = -2 * Math.PI * currentScanFreq * t; // 시계방향 회전
-            
-            let x = f_t * Math.cos(theta);
-            let y = f_t * Math.sin(theta);
-            
-            complexPoints.push({x: x, y: y});
-            
-            sumX += x;
-            sampleCount++;
-        }
-
-        // 최종 수집된 10초 데이터 기반 x좌표의 무게중심 평균값 구하기
+        sumX += x;
+        sampleCount++;
         let centerOfGravityX = sumX / sampleCount;
 
-        // 영상 이미지 최적화 매핑 보정 (사인파 합성 위상에 따른 세기 스케일링 보정)
-        // 3Blue1Brown 영상 공식 매커니즘 정류 적용
-        let finalYVal = Math.abs(centerOfGravityX); 
+        complexPoints.push({x: x, y: y});
 
-        // 3번 차트 데이터에 스캔 결과 누적 기록
-        fourierSpectrumPoints.push({x: currentScanFreq, y: finalYVal});
-
-        // 2번 원형 차트 실시간 드로잉 업데이트
-        complexChart.data.datasets[0].data = complexPoints;
-        complexChart.data.datasets[1].data = [{x: centerOfGravityX, y: 0}]; // X축 위에 무게중심 포인트 마킹
-
-        // 3번 누적 스펙트럼 차트 리프레시
-        fourierChart.data.datasets[0].data = [...fourierSpectrumPoints];
+        // 2번 복소평면 업데이트 (속도가 늦춰져서 선이 그려지는 궤적이 눈에 명확히 보입니다)
+        complexChart.data.datasets[0].data = [...complexPoints];
+        complexChart.data.datasets[1].data = [{x: x, y: y}];
+        complexChart.data.datasets[2].data = [{x: centerOfGravityX, y: 0}]; // 노란색 무게중심 점 추가
 
         complexChart.update();
-        fourierChart.update();
 
-        currentScanFreq += freqStep;
-        animationFrameId = requestAnimationFrame(scanLoop);
+        currentTime += dt;
+        // 부드럽게 감기는 모습을 제어하기 위해 프레임 타이밍 조절
+        animationFrameId = requestAnimationFrame(animate);
     }
 
     window.onload = () => {
         initCharts();
-        drawStaticTimeChart();
+        calculateFullFourierSpectrum();
+        resetSimulation();
     };
 </script>
 
