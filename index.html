@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>주파수 분해 기계: 원형 감기 시각화</title>
+    <title>푸리에 주파수 분석기 - 맥박형 시각화</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { 
@@ -16,7 +16,6 @@
         h2 { color: #61dafb; margin-bottom: 5px; }
         p { color: #94a3b8; margin-bottom: 25px; }
         
-        /* 컨트롤러 디자인 */
         .controls { 
             background: #1e293b; 
             padding: 20px; 
@@ -41,7 +40,6 @@
             accent-color: #61dafb;
         }
         
-        /* 그래프 레이아웃 */
         .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; }
         .chart-container { 
             background: #1e293b; 
@@ -52,7 +50,7 @@
         .chart-container h3 { margin-top: 0; font-size: 16px; color: #94a3b8; border-bottom: 1px solid #334155; padding-bottom: 10px; }
         .full-width { grid-column: span 2; }
         
-        canvas { width: 100% !important; height: 320px !important; }
+        canvas { width: 100% !important; height: 300px !important; }
         
         button { 
             padding: 12px 30px; 
@@ -76,8 +74,8 @@
 <body>
 
 <div class="container">
-    <h2>Fourier Winding Machine (원형 파형 감기 기계)</h2>
-    <p>선형의 시간 그래프를 둥근 원형 틀에 감아 보며, 파형의 무게중심이 쏠리는 기하학적 흔적을 추적합니다.</p>
+    <h2>Fourier Winding Machine (10초 확장 분석 버전)</h2>
+    <p>제안하신 대로 분석 시간을 10초로 확장하여 일치하는 주파수에서의 격렬한 진동 및 급등 현상을 시각화합니다.</p>
     
     <div class="controls">
         <div class="input-row">
@@ -101,25 +99,25 @@
 
     <div class="chart-grid">
         <div class="chart-container">
-            <h3>1. 원래 시간-세기 그래프 (선형 파형)</h3>
+            <h3>1. 원래 시간-세기 그래프 (0 ~ 10초)</h3>
             <canvas id="timeChart"></canvas>
         </div>
         
         <div class="chart-container">
-            <h3>2. 원형 틀에 둘둘 감아버린 파형 (기하학적 매핑)</h3>
+            <h3>2. 원형 틀에 둘둘 감아버린 파형</h3>
             <canvas id="complexChart"></canvas>
         </div>
         
         <div class="chart-container full-width">
-            <h3>3. 흐른 시간에 따른 무게중심의 중심 이탈도 (일치할 때 위로 급등)</h3>
+            <h3>3. 요청하신 실시간 무게중심 변위 그래프 (X: 시간, Y: 변위 좌표 좌표계)</h3>
             <canvas id="centerTrackingChart"></canvas>
         </div>
     </div>
 </div>
 
 <script>
-    const maxTime = 4.0; 
-    const dt = 0.015;     
+    const maxTime = 10.0; // 요청하신 대로 10초로 늘림!
+    const dt = 0.02;     
     
     let currentTime = 0;
     let animationFrameId = null;
@@ -129,8 +127,12 @@
     let windingFreq = 1.0;
     
     let complexPoints = [];
+    let trackingTimeX = [];
     let trackingMagnitudeY = [];
-    let sumReal = 0, sumImag = 0, count = 0;
+    
+    // 푸리에 적분 누적값 (실시간 적분 변화량 계산용)
+    let integralReal = 0;
+    let integralImag = 0;
 
     let timeChart, complexChart, centerTrackingChart;
 
@@ -150,58 +152,53 @@
     freq2Input.addEventListener('change', () => { f2 = parseFloat(freq2Input.value); resetSimulation(); });
     startBtn.addEventListener('click', startSimulation);
 
-    // 합성 함수 (2개 진동수 조합)
     function signalFunction(t) {
-        // 기본 반지름 역할을 할 수 있도록 오프셋(+2.0)을 주어 원형 결이 예쁘게 보이도록 유도
-        return 2.0 + Math.sin(2 * Math.PI * f1 * t) + Math.sin(2 * Math.PI * f2 * t);
+        return Math.sin(2 * Math.PI * f1 * t) + Math.sin(2 * Math.PI * f2 * t);
     }
 
     function initCharts() {
         Chart.defaults.color = '#94a3b8';
         Chart.defaults.borderColor = '#334155';
 
-        // 1. 시간 그래프 (부드러운 곡선 처리)
         timeChart = new Chart(document.getElementById('timeChart').getContext('2d'), {
             type: 'line',
             data: {
                 datasets: [
                     { label: '합성 신호 f(t)', data: [], borderColor: '#38bdf8', borderWidth: 2, pointRadius: 0, tension: 0.4 },
-                    { label: '현재 감는 위치', data: [], borderColor: '#f43f5e', borderDash: [4,4], pointRadius: 0 }
+                    { label: '현재 위치', data: [], borderColor: '#f43f5e', borderDash: [4,4], pointRadius: 0 }
                 ]
             },
             options: { scales: { x: { type: 'linear', min: 0, max: maxTime } }, animation: false, plugins: { legend: { display: false } } }
         });
 
-        // 2. 원형 감기 그래프 (네온 그린 톤)
         complexChart = new Chart(document.getElementById('complexChart').getContext('2d'), {
             type: 'scatter',
             data: {
                 datasets: [
-                    { label: '원형으로 감긴 파형', data: [], borderColor: '#4ade80', borderWidth: 2, showLine: true, pointRadius: 0, tension: 0.4 },
-                    { label: '현재 끝점', data: [], backgroundColor: '#f43f5e', pointRadius: 6 },
-                    { label: '무게중심', data: [], backgroundColor: '#fbbf24', pointRadius: 9, pointStyle: 'rectRot' }
+                    { label: '원형으로 감긴 파형', data: [], borderColor: '#4ade80', borderWidth: 1.5, showLine: true, pointRadius: 0, tension: 0.4 },
+                    { label: '현재 끝점', data: [], backgroundColor: '#f43f5e', pointRadius: 5 }
                 ]
             },
             options: { 
                 scales: { 
-                    x: { min: -4.5, max: 4.5, grid: { color: '#1e293b' } }, 
-                    y: { min: -4.5, max: 4.5, grid: { color: '#1e293b' } } 
+                    x: { min: -2.5, max: 2.5, grid: { color: '#1e293b' } }, 
+                    y: { min: -2.5, max: 2.5, grid: { color: '#1e293b' } } 
                 }, 
                 aspectRatio: 1, 
                 animation: false,
-                plugins: { legend: { labels: { boxWidth: 12 } } }
+                plugins: { legend: { display: false } }
             }
         });
 
-        // 3. 무게중심 실시간 급등 그래프
+        // 3번 차트: 스크린샷의 '요동치며 급등하는 그래프' 메커니즘 적용
         centerTrackingChart = new Chart(document.getElementById('centerTrackingChart').getContext('2d'), {
             type: 'line',
             data: {
                 datasets: [{
-                    label: '중심 탈출 거리',
+                    label: '무게중심 변위 흔적',
                     data: [],
-                    borderColor: '#a855f7',
-                    backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(245, 158, 11, 0.05)',
                     fill: true,
                     pointRadius: 0,
                     tension: 0.2
@@ -210,7 +207,7 @@
             options: {
                 scales: {
                     x: { type: 'linear', min: 0, max: maxTime, title: { display: true, text: '시간 (초)' } },
-                    y: { min: 0, max: 2.5, title: { display: true, text: '이탈 거리' } }
+                    y: { title: { display: true, text: '변위 스케일' } }
                 },
                 animation: false
             }
@@ -221,18 +218,20 @@
         cancelAnimationFrame(animationFrameId);
         currentTime = 0;
         complexPoints = [];
+        trackingTimeX = [];
         trackingMagnitudeY = [];
-        sumReal = 0; sumImag = 0; count = 0;
+        integralReal = 0;
+        integralImag = 0;
 
         let t_arr = [];
-        for(let t=0; t<=maxTime; t+=dt) t_arr.push({x: t, y: signalFunction(t) - 2.0}); // 시각화 가이드는 기본 파형만
+        for(let t=0; t<=maxTime; t+=dt) t_arr.push({x: t, y: signalFunction(t)});
         
         timeChart.data.datasets[0].data = t_arr;
         timeChart.data.datasets[1].data = [];
         
         complexChart.data.datasets[0].data = [];
         complexChart.data.datasets[1].data = [];
-        complexChart.data.datasets[2].data = [];
+        
         centerTrackingChart.data.datasets[0].data = [];
         
         timeChart.update();
@@ -254,37 +253,31 @@
             return;
         }
 
-        // 원형 감기가 찌그러지지 않고 예쁜 트랙 모양을 그리도록 감기 알고리즘 수정
-        let radius = signalFunction(currentTime); 
-        let theta = -2 * Math.PI * windingFreq * currentTime; // 시계방향 회전각
+        let f_t = signalFunction(currentTime); 
+        let theta = -2 * Math.PI * windingFreq * currentTime; 
         
-        let x = radius * Math.cos(theta);
-        let y = radius * Math.sin(theta);
+        // 2번 원형 감기 좌표
+        let x = f_t * Math.cos(theta);
+        let y = f_t * Math.sin(theta);
 
-        // 무게중심 추적 (순수 신호 성분의 편향도 측정)
-        let pure_f_t = radius - 2.0; 
-        sumReal += pure_f_t * Math.cos(theta);
-        sumImag += pure_f_t * Math.sin(theta);
-        count++;
-        
-        let centerReal = sumReal / count;
-        let centerImag = sumImag / count;
-        let distanceFromCenter = Math.sqrt(centerReal**2 + centerImag**2);
+        // 3번 그래프를 위한 연속 푸리에 변환 수치 적분(Aero-Dynamic Tracking)
+        // 시간이 지나면서 일치하는 주파수는 적분 값이 폭발적으로 요동치며 커짐
+        integralReal += f_t * Math.cos(theta) * dt;
+        integralImag += f_t * Math.sin(theta) * dt;
+        let currentIntegrationVal = Math.sqrt(integralReal**2 + integralImag**2);
 
         complexPoints.push({x: x, y: y});
-        trackingMagnitudeY.push({x: currentTime, y: distanceFromCenter});
+        trackingMagnitudeY.push({x: currentTime, y: currentIntegrationVal});
 
-        // 1번 차트 탐침선
+        // 그래프 갱신
         timeChart.data.datasets[1].data = [{x: currentTime, y: -2.5}, {x: currentTime, y: 2.5}];
         
-        // 2번 차트 (원형 감기 선 및 무게중심)
         complexChart.data.datasets[0].data = [...complexPoints];
         complexChart.data.datasets[1].data = [{x: x, y: y}];
-        // 무게중심 위치 시각적 매핑을 위해 배율 조정
-        complexChart.data.datasets[2].data = [{x: centerReal * 2, y: centerImag * 2}]; 
 
-        // 3번 차트 (시간 대비 급등선)
+        // 스크린샷처럼 실시간 Y축 자동 범위를 위해 차트 빌더 세팅 업데이트
         centerTrackingChart.data.datasets[0].data = [...trackingMagnitudeY];
+        centerTrackingChart.options.scales.y.max = Math.max(2.0, currentIntegrationVal * 1.2);
 
         timeChart.update();
         complexChart.update();
